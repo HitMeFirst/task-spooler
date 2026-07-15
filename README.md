@@ -1,5 +1,18 @@
 # GPU Task Spooler
 
+## 修改记录
+
+本仓库基于 task-spooler 做了以下定制修改：
+
+* `ts -l` 默认显示完整 Output 文件名，并新增 `--short_output` 用于显示旧版截断文件名。
+* `ts -O` 支持指定输出文件的目录和文件名前缀；输出固定为 `.txt` 后缀，不再追加随机后缀。
+* `ts -O` 指定的父目录不存在时会自动递归创建目录；重复使用同名输出会覆盖原 `.txt` 文件。
+* `-E` 分离 stderr 时，stderr 文件会跟随 stdout 文件名生成 `.txt.e`。
+* `ts -l` 会根据最长 Output 动态对齐列宽，使 `E-Level`、`Time`、`Command` 列保持对齐。
+* 正在运行的任务会在 `Time` 列显示已经执行的时间，完成任务仍显示最终耗时。
+* 已忽略本地构建产物和临时文件，包括 `ts`、`makeman`、`ts.1` 和 `*.orig`。
+
+
 ## Contents
 
 * [About](https://github.com/justanhduc/task-spooler#about)
