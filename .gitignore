@@ -41,3 +41,7 @@ obj/
 .objs/
 *.o
 
+makeman
+ts
+ts.1
+*.orig
