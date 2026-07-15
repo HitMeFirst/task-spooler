@@ -117,6 +117,7 @@ static struct option longOptions[] = {
         {"last_queue_id",      no_argument,       NULL, 'q'},
         {"full_cmd",           required_argument, NULL, 'F'},
         {"serialize",          required_argument, NULL, 'M'},
+        {"short_output",       no_argument,       NULL, 0},
         {"getenv",             required_argument, NULL, 0},
         {"setenv",             required_argument, NULL, 0},
         {"unsetenv",           required_argument, NULL, 0},
@@ -166,6 +167,9 @@ void parse_opts(int argc, char **argv) {
                 } else if (strcmp(longOptions[optionIdx].name, "set_logdir") == 0) {
                     command_line.request = c_SET_LOGDIR;
                     command_line.label = optarg; /* reuse this variable */
+                } else if (strcmp(longOptions[optionIdx].name, "short_output") == 0) {
+                    command_line.request = c_LIST;
+                    command_line.list_format = SHORT_OUTPUT;
 #ifndef CPU
                 } else if (strcmp(longOptions[optionIdx].name, "set_gpu_free_perc") == 0) {
                     command_line.request = c_SET_FREE_PERC;
@@ -213,7 +217,7 @@ void parse_opts(int argc, char **argv) {
                 command_line.jobid = atoi(optarg);
                 break;
             case 'O':
-                command_line.logfile = optarg;
+                command_line.logfile = strdup(optarg);
                 break;
             case 'n':
                 command_line.store_output = 0;
@@ -506,6 +510,7 @@ static void print_help(const char *cmd) {
     printf("  --get_logdir                           get the path containing log files.\n");
     printf("  --set_logdir [path]                    set the path containing log files.\n");
     printf("  --serialize [format]  || -M [format]   serialize the job list to the specified format. Choices: {default, json, tab}.\n");
+    printf("  --short_output                         show shortened output filenames in the job list.\n");
 #ifndef CPU
     printf("  --set_gpu_free_perc   [num]                   set the value of GPU memory threshold above which GPUs are considered available (90 by default).\n");
     printf("  --get_gpu_free_perc                           get the value of GPU memory threshold above which GPUs are considered available.\n");
@@ -543,7 +548,7 @@ static void print_help(const char *cmd) {
     printf("  -f           don't fork into background.\n");
     printf("  -m           send the output by e-mail (uses sendmail).\n");
     printf("  -d           the job will be run after the last job ends.\n");
-    printf("  -O [name]    set name of the log file (without any path).\n");
+    printf("  -O [name]    set name of the log file. Appends .txt; parent directories are created as needed.\n");
     printf("  -D [id,...]  the job will be run after the job of given IDs ends.\n");
     printf("  -W [id,...]  the job will be run after the job of given IDs ends well (exit code 0).\n");
     printf("  -L [label]   name this task with a label, to be distinguished on listing.\n");

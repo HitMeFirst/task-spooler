@@ -40,14 +40,20 @@ char *joblistdump_headers() {
     return line;
 }
 
-char *joblist_headers() {
+char *joblist_headers_with_output_width(int output_width) {
     char *line;
+    int maxlen;
 
-    line = malloc(100);
+    if (output_width < 20)
+        output_width = 20;
+
+    maxlen = 100 + output_width;
+    line = malloc(maxlen);
 #ifndef CPU
-    snprintf(line, 100, "%-4s %-10s %-20s %-8s %-6s %-5s %s [run=%i/%i]\n",
+    snprintf(line, maxlen, "%-4s %-10s %-*s %-8s %-6s %-5s %s [run=%i/%i]\n",
              "ID",
              "State",
+             output_width,
              "Output",
              "E-Level",
              "Time",
@@ -56,9 +62,10 @@ char *joblist_headers() {
              busy_slots,
              max_slots);
 #else
-    snprintf(line, 100, "%-4s %-10s %-20s %-8s %-6s %s [run=%i/%i]\n",
+    snprintf(line, maxlen, "%-4s %-10s %-*s %-8s %-6s %s [run=%i/%i]\n",
              "ID",
              "State",
+             output_width,
              "Output",
              "E-Level",
              "Time",
@@ -69,6 +76,10 @@ char *joblist_headers() {
     return line;
 }
 
+char *joblist_headers() {
+    return joblist_headers_with_output_width(20);
+}
+
 char *jobgpulist_header() {
     return "ID   GPU-IDs\n";
 }
@@ -77,7 +88,7 @@ static int max(int a, int b) {
     return a > b ? a : b;
 }
 
-static const char *ofilename_shown(const struct Job *p) {
+static const char *ofilename_shown(const struct Job *p, int shorten_output) {
     const char *output_filename;
 
     if (p->state == SKIPPED) {
@@ -91,15 +102,21 @@ static const char *ofilename_shown(const struct Job *p) {
                  * problems */
                 output_filename = "(...)";
             else
-                output_filename = shorten(p->output_filename, 20);
+                output_filename = shorten_output ? shorten(p->output_filename, 20)
+                                                 : p->output_filename;
         }
     } else
         output_filename = "stdout";
 
     return output_filename;
 }
+int joblist_output_width(const struct Job *p, int shorten_output) {
+    int width = strlen(ofilename_shown(p, shorten_output));
+    return width < 20 ? 20 : width;
+}
 
-static char *print_noresult(const struct Job *p) {
+
+static char *print_noresult(const struct Job *p, int shorten_output, int output_width) {
     const char *jobstate;
     const char *output_filename;
     int maxlen;
@@ -107,11 +124,19 @@ static char *print_noresult(const struct Job *p) {
     /* 20 chars should suffice for a string like "[int,int,..]&& " */
     char dependstr[20] = "";
     int cmd_len;
+    char timestr[20] = "";
 
     jobstate = jstate2string(p->state);
-    output_filename = ofilename_shown(p);
+    output_filename = ofilename_shown(p, shorten_output);
+    if (output_width < 20)
+        output_width = 20;
+    if (p->state == RUNNING && p->info.start_time.tv_sec != 0) {
+        float running_ms = pinfo_time_until_now(&p->info);
+        char *unit = time_rep(&running_ms);
+        snprintf(timestr, sizeof(timestr), "%5.2f%s", running_ms, unit);
+    }
 
-    maxlen = 4 + 1 + 10 + 1 + 20 + 1 + 8 + 1
+    maxlen = 4 + 1 + 10 + 1 + output_width + 1 + 8 + 1
              + 25 + 1 + 5 + 1 + strlen(p->command) + 20; /* 20 is the margin for errors */
 
     if (p->label)
@@ -142,23 +167,25 @@ static char *print_noresult(const struct Job *p) {
         char *label = shorten(p->label, 20);
         char *cmd = shorten(p->command, cmd_len);
 #ifndef CPU
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8s %6s %-5d %s[%s]%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8s %6s %-5d %s[%s]%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  "",
-                 "",
+                 timestr,
                  p->num_gpus,
                  dependstr,
                  label,
                  cmd);
 #else
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8s %6s %s[%s]%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8s %6s %s[%s]%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  "",
-                 "",
+                 timestr,
                  dependstr,
                  label,
                  cmd);
@@ -169,22 +196,24 @@ static char *print_noresult(const struct Job *p) {
     else {
         char *cmd = shorten(p->command, cmd_len);
 #ifndef CPU
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8s %6s %-5d %s%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8s %6s %-5d %s%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  "",
-                 "",
+                 timestr,
                  p->num_gpus,
                  dependstr,
                  cmd);
 #else
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8s %6s %s%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8s %6s %s%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  "",
-                 "",
+                 timestr,
                  dependstr,
                  cmd);
 #endif
@@ -194,7 +223,7 @@ static char *print_noresult(const struct Job *p) {
     return line;
 }
 
-static char *print_result(const struct Job *p) {
+static char *print_result(const struct Job *p, int shorten_output, int output_width) {
     const char *jobstate;
     int maxlen;
     char *line;
@@ -206,9 +235,11 @@ static char *print_result(const struct Job *p) {
     int cmd_len;
 
     jobstate = jstate2string(p->state);
-    output_filename = ofilename_shown(p);
+    output_filename = ofilename_shown(p, shorten_output);
+    if (output_width < 20)
+        output_width = 20;
 
-    maxlen = 4 + 1 + 10 + 1 + 20 + 1 + 8 + 1
+    maxlen = 4 + 1 + 10 + 1 + output_width + 1 + 8 + 1
              + 25 + 1 + 5 + 1 + strlen(p->command) + 20; /* 20 is the margin for errors */
 
     if (p->label)
@@ -239,9 +270,10 @@ static char *print_result(const struct Job *p) {
         char *label = shorten(p->label, 20);
         char *cmd = shorten(p->command, cmd_len);
 #ifndef CPU
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8i %5.2f%s %-5d %s[%s]%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8i %5.2f%s %-5d %s[%s]%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  p->result.errorlevel,
                  real_ms,
@@ -251,9 +283,10 @@ static char *print_result(const struct Job *p) {
                  label,
                  cmd);
 #else
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8i %5.2f%s %s[%s]%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8i %5.2f%s %s[%s]%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  p->result.errorlevel,
                  real_ms,
@@ -268,9 +301,10 @@ static char *print_result(const struct Job *p) {
     else {
         char *cmd = shorten(p->command, cmd_len);
 #ifndef CPU
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8i %5.2f%s %-5d %s%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8i %5.2f%s %-5d %s%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  p->result.errorlevel,
                  real_ms,
@@ -279,9 +313,10 @@ static char *print_result(const struct Job *p) {
                  dependstr,
                  cmd);
 #else
-        snprintf(line, maxlen, "%-4i %-10s %-20s %-8i %5.2f%s %s%s\n",
+        snprintf(line, maxlen, "%-4i %-10s %-*s %-8i %5.2f%s %s%s\n",
                  p->jobid,
                  jobstate,
+                 output_width,
                  output_filename,
                  p->result.errorlevel,
                  real_ms,
@@ -318,9 +353,9 @@ static char *plainprint_noresult(const struct Job *p) {
     char dependstr[20] = "";
 
     jobstate = jstate2string(p->state);
-    output_filename = ofilename_shown(p);
+    output_filename = ofilename_shown(p, 0);
 
-    maxlen = 4 + 1 + 10 + 1 + 20 + 1 + 8 + 1
+    maxlen = 4 + 1 + 10 + 1 + strlen(output_filename) + 1 + 8 + 1
              + 25 + 1 + 5 + 1 + strlen(p->command) + 20; /* 20 is the margin for errors */
 
     if (p->label)
@@ -406,9 +441,9 @@ static char *plainprint_result(const struct Job *p) {
     char *unit = time_rep(&real_ms);
 
     jobstate = jstate2string(p->state);
-    output_filename = ofilename_shown(p);
+    output_filename = ofilename_shown(p, 0);
 
-    maxlen = 4 + 1 + 10 + 1 + 20 + 1 + 8 + 1
+    maxlen = 4 + 1 + 10 + 1 + strlen(output_filename) + 1 + 8 + 1
              + 25 + 1 + + 5 + 1 + strlen(p->command) + 20; /* 20 is the margin for errors */
 
     if (p->label)
@@ -487,16 +522,33 @@ static char *plainprint_result(const struct Job *p) {
     return line;
 }
 
-char *joblist_line(const struct Job *p) {
+static char *joblist_line_with_output(const struct Job *p, int shorten_output, int output_width) {
     char *line;
 
     if (p->state == FINISHED)
-        line = print_result(p);
+        line = print_result(p, shorten_output, output_width);
     else
-        line = print_noresult(p);
+        line = print_noresult(p, shorten_output, output_width);
 
     return line;
 }
+
+char *joblist_line(const struct Job *p) {
+    return joblist_line_with_output(p, 0, 20);
+}
+
+char *joblist_line_short_output(const struct Job *p) {
+    return joblist_line_with_output(p, 1, 20);
+}
+
+char *joblist_line_with_output_width(const struct Job *p, int output_width) {
+    return joblist_line_with_output(p, 0, output_width);
+}
+
+char *joblist_line_short_output_with_output_width(const struct Job *p, int output_width) {
+    return joblist_line_with_output(p, 1, output_width);
+}
+
 
 char *joblist_line_plain(const struct Job *p) {
     char *line;

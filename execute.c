@@ -17,6 +17,8 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include <assert.h>
 
 #include "main.h"
@@ -136,9 +138,22 @@ static void run_gzip(int fd_out, int fd_in) {
     }
 }
 
+static void mkdir_parent_dirs(char *path) {
+    char *p;
+
+    for (p = path + 1; *p; ++p) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(path, 0700) == -1 && errno != EEXIST)
+                error("mkdir %s", path);
+            *p = '/';
+        }
+    }
+}
+
+
 static void run_child(int fd_send_filename, char* tmpdir) {
     char *outfname;
-    char errfname[sizeof outfname + 2]; /* .e */
     int namesize;
     int outfd;
     int err;
@@ -146,8 +161,9 @@ static void run_child(int fd_send_filename, char* tmpdir) {
     char *cmd = build_command_string();
 
     if (command_line.logfile) {
-        outfname = malloc(1 + strlen(command_line.logfile) + strlen(".XXXXXX") + 1);
-        sprintf(outfname, "/%s.XXXXXX", command_line.logfile);
+        int logfile_has_path = strchr(command_line.logfile, '/') != NULL;
+        outfname = malloc((logfile_has_path ? 0 : 1) + strlen(command_line.logfile) + strlen(".txt") + 1);
+        sprintf(outfname, "%s%s.txt", logfile_has_path ? "" : "/", command_line.logfile);
     } else
         outfname = "/ts-out.XXXXXX";
 
@@ -155,15 +171,27 @@ static void run_child(int fd_send_filename, char* tmpdir) {
         /* Prepare path */
         int lname;
         char *outfname_full;
+        int outfname_has_path = command_line.logfile && strchr(command_line.logfile, '/') != NULL;
         char *outdir = tmpdir == NULL ? "/tmp" : tmpdir;
 
-        lname = strlen(outdir) + strlen(outfname) + 1 /* \0 */;
+        lname = (outfname_has_path ? 0 : strlen(outdir)) + strlen(outfname) + 1 /* \0 */;
         outfname_full = (char *) malloc(lname);
-        strcpy(outfname_full, outdir);
-        strcat(outfname_full, outfname);
+        if (outfname_has_path)
+            strcpy(outfname_full, outfname);
+        else {
+            strcpy(outfname_full, outdir);
+            strcat(outfname_full, outfname);
+        }
+        if (command_line.logfile)
+            free(outfname);
+        if (outfname_has_path)
+            mkdir_parent_dirs(outfname_full);
 
         /* Prepare the filename */
-        outfd = mkstemp(outfname_full); /* stdout */
+        if (command_line.logfile)
+            outfd = open(outfname_full, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+        else
+            outfd = mkstemp(outfname_full); /* stdout */
         assert(outfd != -1);
         write(outfd, cmd, strlen(cmd));
         write(outfd, "\n", 2);
@@ -181,9 +209,11 @@ static void run_child(int fd_send_filename, char* tmpdir) {
             assert(err != -1);
             if (command_line.stderr_apart) {
                 int errfd;
-                strncpy(errfname, outfname_full, sizeof errfname);
-                strncat(errfname, ".e", 2 + 1);
+                char *errfname = malloc(strlen(outfname_full) + strlen(".e") + 1);
+                strcpy(errfname, outfname_full);
+                strcat(errfname, ".e");
                 errfd = open(errfname, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+                free(errfname);
                 assert(err == 0);
                 err = dup2(errfd, 2);
                 assert(err == 0);
@@ -204,9 +234,11 @@ static void run_child(int fd_send_filename, char* tmpdir) {
             dup2(outfd, 1); /* stdout */
             if (command_line.stderr_apart) {
                 int errfd;
-                strncpy(errfname, outfname_full, sizeof errfname);
-                strncat(errfname, ".e", 2 + 1);
+                char *errfname = malloc(strlen(outfname_full) + strlen(".e") + 1);
+                strcpy(errfname, outfname_full);
+                strcat(errfname, ".e");
                 errfd = open(errfname, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+                free(errfname);
                 dup2(errfd, 2);
                 close(errfd);
             } else

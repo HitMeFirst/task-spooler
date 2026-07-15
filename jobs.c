@@ -455,9 +455,31 @@ void s_list(int s, enum ListFormat listFormat) {
     struct Job *p;
     char *buffer = 0;
 
-    if (listFormat == DEFAULT) {
+    if (listFormat == DEFAULT || listFormat == SHORT_OUTPUT) {
+        int output_width = 20;
+        int shorten_output = listFormat == SHORT_OUTPUT;
+
+        /* Compute the Output column width before printing rows. */
+        p = firstjob;
+        while (p != 0) {
+            if (p->state != HOLDING_CLIENT) {
+                int width = joblist_output_width(p, shorten_output);
+                if (width > output_width)
+                    output_width = width;
+            }
+            p = p->next;
+        }
+
+        p = first_finished_job;
+        while (p != 0) {
+            int width = joblist_output_width(p, shorten_output);
+            if (width > output_width)
+                output_width = width;
+            p = p->next;
+        }
+
         /* Times:   0.00/0.00/0.00 - 4+4+4+2 = 14*/
-        buffer = joblist_headers();
+        buffer = joblist_headers_with_output_width(output_width);
         send_list_line(s, buffer);
         free(buffer);
 
@@ -465,7 +487,10 @@ void s_list(int s, enum ListFormat listFormat) {
         p = firstjob;
         while (p != 0) {
             if (p->state != HOLDING_CLIENT) {
-                buffer = joblist_line(p);
+                if (shorten_output)
+                    buffer = joblist_line_short_output_with_output_width(p, output_width);
+                else
+                    buffer = joblist_line_with_output_width(p, output_width);
                 send_list_line(s, buffer);
                 free(buffer);
             }
@@ -476,7 +501,10 @@ void s_list(int s, enum ListFormat listFormat) {
 
         /* Show Finished jobs */
         while (p != 0) {
-            buffer = joblist_line(p);
+            if (shorten_output)
+                buffer = joblist_line_short_output_with_output_width(p, output_width);
+            else
+                buffer = joblist_line_with_output_width(p, output_width);
             send_list_line(s, buffer);
             free(buffer);
             p = p->next;

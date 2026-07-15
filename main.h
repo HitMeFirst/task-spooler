@@ -9,7 +9,7 @@
 
 enum {
     CMD_LEN = 500,
-    PROTOCOL_VERSION = 730
+    PROTOCOL_VERSION = 731
 };
 
 enum MsgTypes {
@@ -96,7 +96,8 @@ enum Request {
 enum ListFormat {
     DEFAULT,
     JSON,
-    TAB
+    TAB,
+    SHORT_OUTPUT
 };
 
 struct CommandLine {
@@ -480,10 +481,18 @@ void warning_msg(const struct Msg *m, const char *str, ...);
 
 /* list.c */
 char *joblist_headers();
+char *joblist_headers_with_output_width(int output_width);
+
+int joblist_output_width(const struct Job *p, int shorten_output);
 
 char *jobgpulist_header();
 
 char *joblist_line(const struct Job *p);
+
+char *joblist_line_short_output(const struct Job *p);
+char *joblist_line_with_output_width(const struct Job *p, int output_width);
+
+char *joblist_line_short_output_with_output_width(const struct Job *p, int output_width);
 
 char *joblist_line_plain(const struct Job *p);
 

@@ -93,6 +93,7 @@ Long option actions:
   --get_logdir                        get the path containing log files.
   --set_logdir           [path]       set the path containing log files. 
   --serialize [format] || -M [format] serialize the job list to the specified format. Choices: {default, json, tab}.
+  --short_output                    show shortened output filenames in the job list.
 Long option adding jobs:
   --gpus               || -G [num]    number of GPUs required by the job (1 default).
   --gpu_indices        || -g [id,...] the job will be on these GPU indices without checking whether they are free.
@@ -120,7 +121,7 @@ Actions (can be performed only one at a time):
 Options adding jobs:
   -n           don't store the output of the command.
   -E           Keep stderr apart, in a name like the output file, but adding '.e'.
-  -O           Set name of the log file (without any path).
+  -O           Set name of the log file. Appends .txt; parent directories are created as needed.
   -z           gzip the stored output (if not -n).
   -f           don't fork into background.
   -m           send the output by e-mail (uses sendmail).
